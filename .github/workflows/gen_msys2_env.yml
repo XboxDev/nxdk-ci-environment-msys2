@@ -17,7 +17,8 @@ jobs:
       shell: python
       run: |
         from datetime import datetime
-        print('::set-env name=BUILD_TAG::v' + datetime.now().strftime('%y%m%d%H%M%S'))
+        import os
+        os.system('powershell -Command Add-Content -Path $env:GITHUB_ENV -Value "BUILD_TAG=v' + datetime.now().strftime('%y%m%d%H%M%S') + '"')
     - name: Install MSYS2 & Dependencies
       run: |
         choco install msys2 --no-progress
