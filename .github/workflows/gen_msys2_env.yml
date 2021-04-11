@@ -1,59 +1,50 @@
-# on:
+name: Generate MSYS2 Environment
+
+on: [push, pull_request, workflow_dispatch]
 #   push:
-#     branches: '*'
 #   schedule:
 #     - cron: '0 0 * * *'
-name: Generate MSYS2 Environment
-on: push
 
 jobs:
   windows:
     name: Windows
     runs-on: windows-latest
     env:
-      BUILD_TAG:
+      POWERSHELL_TELEMETRY_OPTOUT: 1
     steps:
-    - name: Define Build Tag
-      shell: python
-      run: |
-        from datetime import datetime
-        import os
-        os.system('powershell -Command Add-Content -Path $env:GITHUB_ENV -Value "BUILD_TAG=v' + datetime.now().strftime('%y%m%d%H%M%S') + '"')
     - name: Install MSYS2 & Dependencies
       run: |
         choco install msys2 --no-progress
-        C:\tools\msys64\usr\bin\bash.exe -lc "pacman --needed --noconfirm -S \
-        git \
-        make \
-        cmake \
-        bison \
-        flex \
-        mingw-w64-x86_64-llvm \
-        mingw-w64-x86_64-clang \
-        mingw-w64-x86_64-lld \
+        C:\tools\msys64\usr\bin\bash -eo pipefail -lc "\
+        pacman --needed --noconfirm -S git make cmake bison flex mingw-w64-x86_64-{llvm,clang,lld} && \
+        pacman -Scc --noconfirm \
         "
-        C:\tools\msys64\usr\bin\bash.exe -lc "pacman -Scc --noconfirm"
     - name: Compress MSYS2 Environment
-      run: 7z a -bd msys64.7z C:\tools\msys64\
+      id: compress
+      run: |
+        $asset="msys64.7z"
+        7z a -bd $asset C:\tools\msys64\
+        echo "::set-output name=asset::$asset"
+    - name: Define Build Tag
+      if: github.event_name == 'push'
+      id: build_tag
+      run: echo "::set-output name=BUILD_TAG::v$(Get-Date -Format yyMMddHHmmss)"
     - name: Create Release
       if: github.event_name == 'push'
       id: create_release
-      uses: actions/create-release@v1.0.0
+      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ env.BUILD_TAG }}
-        release_name: ${{ env.BUILD_TAG }}
-        draft: false
-        prerelease: false
+        tag_name: ${{ steps.build_tag.outputs.BUILD_TAG }}
+        release_name: ${{ steps.build_tag.outputs.BUILD_TAG }}
     - name: Upload Release Assets
       if: github.event_name == 'push'
-      id: upload-release-asset
-      uses: actions/upload-release-asset@v1.0.1
+      uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-        asset_path: msys64.7z
-        asset_name: msys64.7z
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.compress.outputs.asset }}
+        asset_name: ${{ steps.compress.outputs.asset }}
         asset_content_type: application/zip
