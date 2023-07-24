@@ -16,7 +16,7 @@ jobs:
       run: |
         choco install msys2 --no-progress
         C:\tools\msys64\usr\bin\bash -eo pipefail -lc "\
-        pacman --needed --noconfirm -S git make cmake bison flex mingw-w64-x86_64-{llvm,clang,lld} && \
+        pacman --needed --noconfirm -S git make cmake pkgconf bison flex mingw-w64-x86_64-{llvm,clang,lld} && \
         pacman -Scc --noconfirm \
         "
     - name: Compress MSYS2 Environment
@@ -24,27 +24,17 @@ jobs:
       run: |
         $asset="msys64.7z"
         7z a -bd $asset C:\tools\msys64\
-        echo "::set-output name=asset::$asset"
+        echo "asset=${asset}" >> $env:GITHUB_OUTPUT
     - name: Define Build Tag
       if: github.event_name == 'push'
       id: build_tag
-      run: echo "::set-output name=BUILD_TAG::v$(Get-Date -Format yyMMddHHmmss)"
-    - name: Create Release
+      run: echo "BUILD_TAG=v$(Get-Date -Format yyMMddHHmmss)" >> $env:GITHUB_OUTPUT
+    - name: Publish Release
       if: github.event_name == 'push'
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.build_tag.outputs.BUILD_TAG }}
-        release_name: ${{ steps.build_tag.outputs.BUILD_TAG }}
-    - name: Upload Release Assets
-      if: github.event_name == 'push'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ steps.compress.outputs.asset }}
-        asset_name: ${{ steps.compress.outputs.asset }}
-        asset_content_type: application/zip
+        name: ${{ steps.build_tag.outputs.BUILD_TAG }}
+        prerelease: false
+        draft: false
+        files: ${{ steps.compress.outputs.asset }}
